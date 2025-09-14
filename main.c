@@ -38,8 +38,8 @@ int main() {
 
         // types of commands: job-related, piped, normal
         ParsedCmd pcmd = parseCmd(result);
-        printParsedCmd(&pcmd);
-        printf("\n");
+        // printParsedCmd(&pcmd);
+        // printf("\n");
 
         if (pcmd.size == 0) {
             // user pressed 'enter'
@@ -49,65 +49,29 @@ int main() {
 
         
         CommandLine cl = buildCommandLine(&pcmd);
-        printCommandLine(&cl);
+        // printCommandLine(&cl);
         
-        if (pcmd.pipeLocation != -1) {
-            // pipe command, will not be background process
-            Process pLeft;
-            Process pRight;
-        }
-        else {
-
-            if (strcmp(pcmd.arr[pcmd.size - 1], SEND_BACKGROUND) == 0) {
-                // background job
+        if (cl.one) {
+            if (cl.isBackground) {
+                
             }
             else {
-                // normal job
-                char* firstCmd = pcmd.arr[0];
-                // TODO: Do we need to execute jobs commands if we have unecessary args?
-                if (strcmp(firstCmd, "jobs") == 0) {
-                    
-                }
-                else if (strcmp(firstCmd, "fg") == 0) {
-
-                }   
-                else if (strcmp(firstCmd, "bg") == 0) {
-
+                if (cl.two) {
+                    // piping
                 }
                 else {
-                    // execvp used here
-                    pid_t pid = fork();
-                    if (pid == -1) {
-                        perror("Fork failed!");
-                    }
-                    else if (pid == 0) {
-                        // in child process
-                        int inputFileIndex = pcmd.inputRedirectionOne;
-                        int outputFileIndex = pcmd.outputRedirectionOne;
-                        int errFileIndex = pcmd.errRedirectionOne;
-                        int endOfCmd = minIndex(inputFileIndex, outputFileIndex, errFileIndex);
-
+                    char* commandName = cl.one->cmd[0];
+                    if (strcmp(commandName, "jobs") == 0) {
                         
-                        if (endOfCmd == -1) {
-                            int statusCode = execvp(firstCmd, pcmd.arr);
-                        }
-                        else {
-                            char** command = (char**)malloc(sizeof(char*) * (endOfCmd + 1));
-                            memcpy(command, pcmd.arr, sizeof(char**) * endOfCmd);
-                            command[endOfCmd] = NULL;
-                            
-                            
-
-                            int statusCode = execvp(firstCmd, command);
-
-                            free(command);
-                        }
-                        _exit(EXIT_SUCCESS);
+                    }
+                    else if (strcmp(commandName, "bg") == 0) {
+                        
+                    }
+                    else if (strcmp(commandName, "fg") == 0) {
+                        
                     }
                     else {
-                        // wait in parent process
-                        int status;
-                        waitpid(pid, &status, 0);
+                        // exec vp
                     }
                 }
             }

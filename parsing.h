@@ -1,6 +1,3 @@
-const char* PIPE = "|";
-const char* SEND_BACKGROUND = "&";
-
 typedef struct parsedCmd {
     char** arr;
     size_t size;

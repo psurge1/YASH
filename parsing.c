@@ -14,6 +14,10 @@
 #include <parsing.h>
 
 
+const char* PIPE = "|";
+const char* SEND_BACKGROUND = "&";
+
+
 ParsedCmd parseCmd(char* cmd) {
     char* commands[3000] = {NULL};
     int numCommands = 0;
@@ -139,7 +143,7 @@ CommandLine buildCommandLine(const ParsedCmd* pcmd) {
         cmdLine.two->err = NULL;
 
 
-        int endOfCmdOne = find_command_end(pcmd, 0, pcmd->pipeLocation);
+        int endOfCmdOne = findEndOfCmd(pcmd, 0, pcmd->pipeLocation);
         cmdLine.one->cmd = (char**)malloc(sizeof(char*) * (endOfCmdOne + 1));
         memcpy(cmdLine.one->cmd, pcmd->arr, sizeof(char*) * endOfCmdOne);
         cmdLine.one->cmd[endOfCmdOne] = NULL;
@@ -152,7 +156,7 @@ CommandLine buildCommandLine(const ParsedCmd* pcmd) {
             cmdLine.one->err = pcmd->arr[pcmd->errRedirectionOne + 1];
 
         int startOfCmdTwo = pcmd->pipeLocation + 1;
-        int endOfCmdTwo = find_command_end(pcmd, startOfCmdTwo, cmdSize);
+        int endOfCmdTwo = findEndOfCmd(pcmd, startOfCmdTwo, cmdSize);
         int cmdTwoWidth = endOfCmdTwo - startOfCmdTwo;
 
         cmdLine.two->cmd = (char**)malloc(sizeof(char*) * (cmdTwoWidth + 1));
@@ -212,7 +216,6 @@ void printProcess(Process* p) {
         return;
     }
 
-    // Print the command and its arguments
     printf("   Command:   ");
     if (p->cmd) {
         for (int i = 0; p->cmd[i] != NULL; ++i) {

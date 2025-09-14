@@ -11,7 +11,8 @@
 #include <parsing.h>
 #include <commands.h>
 
-const int OPEN_FLAG = O_RDWR|O_CREAT|O_TRUNC;
+const int OPEN_WRITE = O_WRONLY|O_CREAT|O_TRUNC;
+const int OPEN_READ = O_RDONLY;
 const int OPEN_MODE = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
 
 
@@ -34,6 +35,8 @@ Job jobs[20];
  * File creation: use open with S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH
  */
 
+int debugMode = 0;
+
 // parent process
 int main() {
     // forkLearn();
@@ -46,8 +49,11 @@ int main() {
 
         // types of commands: job-related, piped, normal
         ParsedCmd pcmd = parseCmd(result);
-        printParsedCmd(&pcmd);
-        printf("\n");
+
+        if (debugMode) {
+            printParsedCmd(&pcmd);
+            printf("\n");
+        }
 
         if (pcmd.size == 0) {
             // user pressed 'enter'
@@ -57,7 +63,9 @@ int main() {
 
         
         CommandLine cl = buildCommandLine(&pcmd);
-        printCommandLine(&cl);
+        if (debugMode) {
+            printCommandLine(&cl);
+        }
         
         // break;
         
@@ -97,7 +105,7 @@ int main() {
                         dup2(*writeEndOfPipe, STDOUT_FD);
 
                         if (cl.one->input) {
-                            int inFd = open(cl.one->input, OPEN_FLAG, OPEN_MODE);
+                            int inFd = open(cl.one->input, OPEN_READ, OPEN_MODE);
                             if (inFd == -1) {
                                 perror("Error creating/opening input file!");
                                 exit(EXIT_FAILURE);
@@ -105,7 +113,7 @@ int main() {
                             dup2(inFd, STDIN_FD);
                         }
                         if (cl.one->err) {
-                            int errFd = open(cl.one->err, OPEN_FLAG, OPEN_MODE);
+                            int errFd = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
                             if (errFd == -1) {
                                 perror("Error creating/opening error file!");
                                 exit(EXIT_FAILURE);
@@ -129,7 +137,7 @@ int main() {
                         dup2(*readEndOfPipe, STDIN_FD);
 
                         if (cl.two->output) {
-                            int outFd = open(cl.two->output, OPEN_FLAG, OPEN_MODE);
+                            int outFd = open(cl.two->output, OPEN_WRITE, OPEN_MODE);
                             if (outFd == -1) {
                                 perror("Error creating/opening output file!");
                                 exit(EXIT_FAILURE);
@@ -137,7 +145,7 @@ int main() {
                             dup2(outFd, STDOUT_FD);
                         }
                         if (cl.two->err) {
-                            int errFd = open(cl.two->err, OPEN_FLAG, OPEN_MODE);
+                            int errFd = open(cl.two->err, OPEN_WRITE, OPEN_MODE);
                             if (errFd == -1) {
                                 perror("Error creating/opening error file!");
                                 exit(EXIT_FAILURE);
@@ -177,7 +185,7 @@ int main() {
                         else if (pid == 0) {
                             // child
                             if (cl.one->input) {
-                                int inFd = open(cl.one->input, OPEN_FLAG, OPEN_MODE);
+                                int inFd = open(cl.one->input, OPEN_READ, OPEN_MODE);
                                 if (inFd == -1) {
                                     perror("Error creating/opening input file!");
                                     exit(EXIT_FAILURE);
@@ -185,7 +193,7 @@ int main() {
                                 dup2(inFd, STDIN_FD);
                             }
                             if (cl.one->output) {
-                                int outFd = open(cl.one->output, OPEN_FLAG, OPEN_MODE);
+                                int outFd = open(cl.one->output, OPEN_WRITE, OPEN_MODE);
                                 if (outFd == -1) {
                                     perror("Error creating/opening output file!");
                                     exit(EXIT_FAILURE);
@@ -193,7 +201,7 @@ int main() {
                                 dup2(outFd, STDOUT_FD);
                             }
                             if (cl.one->err) {
-                                int errFd = open(cl.one->err, OPEN_FLAG, OPEN_MODE);
+                                int errFd = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
                                 if (errFd == -1) {
                                     perror("Error creating/opening error file!");
                                     exit(EXIT_FAILURE);

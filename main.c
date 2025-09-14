@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <readline/readline.h>
 #include <signal.h>
 
@@ -70,6 +71,7 @@ int main() {
             else {
                 if (cl.two) {
                     // piping
+                    // printf("PIPING\n");
                     int pipeFileDescriptors[2];
                     int* readEndOfPipe = &pipeFileDescriptors[0];
                     int* writeEndOfPipe = &pipeFileDescriptors[1];
@@ -84,9 +86,32 @@ int main() {
                         perror("Error creating fork");
                     }
                     else if (pidOne == 0) {
+                        // printf("INSIDE ONE\n");
+                        // printf("INPUT FILE: |%s|\n", cl.one->input);
                         close(*readEndOfPipe);
                         dup2(*writeEndOfPipe, STDOUT_FD);
+
+                        if (cl.one->input) {
+                            int inFd = open(cl.one->input, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+                            if (inFd == -1) {
+                                perror("Error creating/opening input file!");
+                                exit(EXIT_FAILURE);
+                            }
+                            dup2(inFd, STDIN_FD);
+                        }
+                        if (cl.one->err) {
+                            int errFd = open(cl.one->err, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+                            if (errFd == -1) {
+                                perror("Error creating/opening error file!");
+                                exit(EXIT_FAILURE);
+                            }
+                            dup2(errFd, STDERR_FD);
+                        }
+                        // printf("DONE SETTING UP FDS\n");
+
                         execvp(cl.one->cmd[0], cl.one->cmd);
+                        perror("Error executing process one!");
+                        exit(EXIT_FAILURE);
                     }
 
                     pid_t pidTwo = fork();
@@ -94,14 +119,36 @@ int main() {
                         perror("Error creating fork");
                     }
                     else if (pidTwo == 0) {
+                        // printf("INSIDE TWO\n");
                         close(*writeEndOfPipe);
                         dup2(*readEndOfPipe, STDIN_FD);
-                        execvp(cl.two->cmd[1], cl.two->cmd);
+
+                        if (cl.two->output) {
+                            int outFd = open(cl.two->output, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+                            if (outFd == -1) {
+                                perror("Error creating/opening output file!");
+                                exit(EXIT_FAILURE);
+                            }
+                            dup2(outFd, STDOUT_FD);
+                        }
+                        if (cl.two->err) {
+                            int errFd = open(cl.two->err, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+                            if (errFd == -1) {
+                                perror("Error creating/opening error file!");
+                                exit(EXIT_FAILURE);
+                            }
+                            dup2(errFd, STDERR_FD);
+                        }
+
+                        execvp(cl.two->cmd[0], cl.two->cmd);
+                        perror("Error executing process two!");
+                        exit(EXIT_FAILURE);
                     }
                     
                     // parent process
                     close(*readEndOfPipe);
                     close(*writeEndOfPipe);
+
                     waitpid(pidOne, NULL, 0);
                     waitpid(pidTwo, NULL, 0);
                 }
@@ -117,7 +164,43 @@ int main() {
                         
                     }
                     else {
-                        // exec vp
+                        // execvp
+                        pid_t pid = fork();
+                        if (pid == -1) {
+                            perror("Error creating fork!");
+                        }
+                        else if (pid == 0) {
+                            // child
+                            if (cl.one->input) {
+                                int inFd = open(cl.one->input, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+                                if (inFd == -1) {
+                                    perror("Error creating/opening input file!");
+                                    exit(EXIT_FAILURE);
+                                }
+                                dup2(inFd, STDIN_FD);
+                            }
+                            if (cl.one->output) {
+                                int outFd = open(cl.two->output, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+                                if (outFd == -1) {
+                                    perror("Error creating/opening output file!");
+                                    exit(EXIT_FAILURE);
+                                }
+                                dup2(outFd, STDIN_FD);
+                            }
+                            if (cl.one->err) {
+                                int errFd = open(cl.two->err, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+                                if (errFd == -1) {
+                                    perror("Error creating/opening error file!");
+                                    exit(EXIT_FAILURE);
+                                }
+                                dup2(errFd, STDIN_FD);
+                            }
+
+                            execvp(cl.one->cmd[0], cl.one->cmd);
+                            exit(EXIT_FAILURE);
+                        }
+
+                        waitpid(pid, NULL, 0);
                     }
                 }
             }

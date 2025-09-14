@@ -11,10 +11,14 @@
 #include <commands.h>
 
 
+enum IO_FDS {
+    STDIN_FD = 0,
+    STDOUT_FD = 1,
+    STDERR_FD = 2
+};
 
 
-
-typedef struct jobStruct {
+typedef struct JobStruct {
 
 } Job;
 Job jobs[20];
@@ -51,13 +55,55 @@ int main() {
         CommandLine cl = buildCommandLine(&pcmd);
         // printCommandLine(&cl);
         
+        /*
+        Command processing steps:
+        - set stdin, stdout, and stderr
+        - fork
+        - execvp
+        - 
+        */
         if (cl.one) {
             if (cl.isBackground) {
+                // background task
                 
             }
             else {
                 if (cl.two) {
                     // piping
+                    int pipeFileDescriptors[2];
+                    int* readEndOfPipe = &pipeFileDescriptors[0];
+                    int* writeEndOfPipe = &pipeFileDescriptors[1];
+
+                    int pipeSuccess = pipe(pipeFileDescriptors);
+                    if (pipeSuccess == -1) {
+                        perror("Error constructing pipe");
+                    }
+
+                    pid_t pidOne = fork();
+                    if (pidOne == -1) {
+                        perror("Error creating fork");
+                    }
+                    else if (pidOne == 0) {
+                        close(*readEndOfPipe);
+                        dup2(*writeEndOfPipe, STDOUT_FD);
+                        execvp(cl.one->cmd[0], cl.one->cmd);
+                    }
+
+                    pid_t pidTwo = fork();
+                    if (pidTwo == -1) {
+                        perror("Error creating fork");
+                    }
+                    else if (pidTwo == 0) {
+                        close(*writeEndOfPipe);
+                        dup2(*readEndOfPipe, STDIN_FD);
+                        execvp(cl.two->cmd[1], cl.two->cmd);
+                    }
+                    
+                    // parent process
+                    close(*readEndOfPipe);
+                    close(*writeEndOfPipe);
+                    waitpid(pidOne, NULL, 0);
+                    waitpid(pidTwo, NULL, 0);
                 }
                 else {
                     char* commandName = cl.one->cmd[0];

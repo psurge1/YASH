@@ -1,4 +1,4 @@
-typedef struct parsedCmd {
+typedef struct ParsedCmd {
     char** arr;
     size_t size;
     int pipeLocation;
@@ -11,14 +11,14 @@ typedef struct parsedCmd {
 } ParsedCmd;
 
 
-typedef struct processStruct {
+typedef struct ProcessStruct {
     char* input;
     char* output;
     char* err;
     char** cmd;
 } Process;
 
-typedef struct commandStruct {
+typedef struct CommandStruct {
     Process* one;
     Process* two;
     int isBackground;

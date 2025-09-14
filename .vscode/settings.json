@@ -6,6 +6,7 @@
         "signal.h": "c",
         "stdlib.h": "c",
         "string.h": "c",
-        "parsing.h": "c"
+        "parsing.h": "c",
+        "stdio.h": "c"
     }
 }

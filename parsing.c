@@ -47,26 +47,26 @@ ParsedCmd parseCmd(char* cmd) {
             pipeLocation = i;
         }
         else if (strcmp(arr[i], ">") == 0) {
-            if (outputRedirectionOne == -1) {
+            if (pipeLocation == -1) {
                 outputRedirectionOne = i;
             }
-            else if (outputRedirectionTwo == -1) {
+            else {
                 outputRedirectionTwo = i;
             }
         }
         else if (strcmp(arr[i], "<") == 0) {
-            if (inputRedirectionOne == -1) {
+            if (pipeLocation == -1) {
                 inputRedirectionOne = i;
             }
-            else if (inputRedirectionTwo == -1) {
+            else {
                 inputRedirectionTwo = i;
             }
         }
         else if (strcmp(arr[i], "2>") == 0) {
-            if (errRedirectionOne == -1) {
+            if (pipeLocation == -1) {
                 errRedirectionOne = i;
             }
-            else if (errRedirectionTwo == -1) {
+            else {
                 errRedirectionTwo = i;
             }
         }

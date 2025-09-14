@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "readline.h": "c",
+        "unistd.h": "c",
+        "commands.h": "c",
+        "signal.h": "c",
+        "stdlib.h": "c",
+        "string.h": "c",
+        "parsing.h": "c"
+    }
+}

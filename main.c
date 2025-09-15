@@ -85,14 +85,6 @@ int main() {
                 if (cl.two) {
                     // piping
                     // printf("PIPING\n");
-                    int pipeFileDescriptors[2];
-                    int* readEndOfPipe = &pipeFileDescriptors[0];
-                    int* writeEndOfPipe = &pipeFileDescriptors[1];
-
-                    int pipeSuccess = pipe(pipeFileDescriptors);
-                    if (pipeSuccess == -1) {
-                        perror("Error constructing pipe");
-                    }
                     
                     int inFdOne = -1;
                     int outFdOne = -1;
@@ -117,6 +109,40 @@ int main() {
                             perror("Error creating/opening error file!");
                             continue;
                         }
+                    }
+
+                    int inFdTwo = -1;
+                    int outFdTwo = -1;
+                    int errFdTwo = -1;
+                    if (cl.two->input) {
+                        inFdTwo = open(cl.two->input, OPEN_READ, OPEN_MODE);
+                        if (inFdTwo == -1) {
+                            perror("Error creating/opening input file!");
+                            continue;
+                        }
+                    }
+                    if (cl.two->output) {
+                        outFdTwo = open(cl.two->output, OPEN_WRITE, OPEN_MODE);
+                        if (outFdTwo == -1) {
+                            perror("Error creating/opening output file!");
+                            continue;
+                        }
+                    }
+                    if (cl.two->err) {
+                        int errFdTwo = open(cl.two->err, OPEN_WRITE, OPEN_MODE);
+                        if (errFdTwo == -1) {
+                            perror("Error creating/opening error file!");
+                            continue;
+                        }
+                    }
+
+                    int pipeFileDescriptors[2];
+                    int* readEndOfPipe = &pipeFileDescriptors[0];
+                    int* writeEndOfPipe = &pipeFileDescriptors[1];
+
+                    int pipeSuccess = pipe(pipeFileDescriptors);
+                    if (pipeSuccess == -1) {
+                        perror("Error constructing pipe");
                     }
 
                     pid_t pidOne = fork();
@@ -145,33 +171,6 @@ int main() {
                     }
 
 
-
-
-                    int inFdTwo = -1;
-                    int outFdTwo = -1;
-                    int errFdTwo = -1;
-                    if (cl.two->input) {
-                        inFdTwo = open(cl.two->input, OPEN_READ, OPEN_MODE);
-                        if (inFdTwo == -1) {
-                            perror("Error creating/opening input file!");
-                            continue;
-                        }
-                    }
-                    if (cl.two->output) {
-                        outFdTwo = open(cl.two->output, OPEN_WRITE, OPEN_MODE);
-                        if (outFdTwo == -1) {
-                            perror("Error creating/opening output file!");
-                            continue;
-                        }
-                    }
-                    if (cl.two->err) {
-                        int errFdTwo = open(cl.two->err, OPEN_WRITE, OPEN_MODE);
-                        if (errFdTwo == -1) {
-                            perror("Error creating/opening error file!");
-                            continue;
-                        }
-                    }
-
                     pid_t pidTwo = fork();
                     if (pidTwo == -1) {
                         perror("Error creating fork");
@@ -181,9 +180,9 @@ int main() {
                         close(*writeEndOfPipe);
                         
                         if (inFdTwo != -1)
-                            dup2(*readEndOfPipe, STDIN_FD);
-                        else
                             dup2(inFdTwo, STDIN_FD);
+                        else
+                            dup2(*readEndOfPipe, STDIN_FD);
 
                         if (outFdTwo != -1) {
                             dup2(outFdTwo, STDOUT_FD);

@@ -9,7 +9,6 @@
 #include <signal.h>
 
 #include <parsing.h>
-#include <commands.h>
 
 const int OPEN_WRITE = O_WRONLY|O_CREAT|O_TRUNC;
 const int OPEN_READ = O_RDONLY;
@@ -49,13 +48,10 @@ void closeOperation(CommandLine* cl, ParsedCmd* pcmd, char* cmdString) {
 
 
 int debugMode = 0;
-volatile pid_t foregroundProcessPID = 0; // can be changed by signal handler (outside control flow): shouldn't be optimized out by compiler
 
 
 void sigIntHandler(int signal) {
-    if (foregroundProcessPID != 0 && foregroundProcessPID != -1) {
-        kill(foregroundProcessPID, SIGTERM);
-    }
+    
 }
 
 void sigStpHandler(int signal) {
@@ -72,9 +68,13 @@ int main() {
     // execLearn();
     // printf("DONE\n");
     // execvp is used to find and execute binary executables
-    signal(SIGINT, sigIntHandler);
-    signal(SIGTSTP, sigStpHandler);
-    signal(SIGCHLD, sigChildHandler);
+    // signal(SIGINT, sigIntHandler);
+    // signal(SIGTSTP, sigStpHandler);
+    // signal(SIGCHLD, sigChildHandler);
+    signal(SIGINT, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
+    signal(SIGTTOU, SIG_IGN);
+    signal(SIGCHLD, SIG_IGN);
 
     // linked list for jobs
     Job* head = NULL;
@@ -236,6 +236,7 @@ int main() {
                         if (errFdTwo != -1) {
                             dup2(errFdTwo, STDERR_FD);
                         }
+                        
 
                         execvp(cl.two->cmd[0], cl.two->cmd);
                         perror("Error executing process two!");
@@ -246,10 +247,8 @@ int main() {
                     close(*readEndOfPipe);
                     close(*writeEndOfPipe);
 
-                    foregroundProcessPID = pidTwo;
                     waitpid(pidOne, NULL, 0);
                     waitpid(pidTwo, NULL, 0);
-                    foregroundProcessPID = 0;
                 }
                 else {
                     char* commandName = cl.one->cmd[0];
@@ -309,9 +308,7 @@ int main() {
                             exit(EXIT_FAILURE);
                         }
                         else {
-                            foregroundProcessPID = pid;
                             waitpid(pid, NULL, 0);
-                            foregroundProcessPID = 0;
                         }
                     }
                 }

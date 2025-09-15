@@ -1,1 +1,1 @@
-"NEWDIG"
+this is output

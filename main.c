@@ -24,9 +24,26 @@ enum IO_FDS {
 
 
 typedef struct JobStruct {
-
+    char** cmd;
+    int jobId;
+    int status; // 0 for running, 1 for stopped, 2 for done
+    struct JobStruct* nextJob;
+    struct JobStruct* previousJob;
 } Job;
 Job jobs[20];
+
+void freeJobsLinkedList(Job* head) {
+    if (!head)
+        return;
+    freeJobsLinkedList(head->nextJob);
+    free(head);
+}
+
+void closeOperation(CommandLine* cl, ParsedCmd* pcmd, char* cmdString) {
+    freeCommandLineProcesses(*cl);
+    freeParsedCmd(*pcmd);
+    free(cmdString);
+}
 
 
 /**
@@ -44,10 +61,24 @@ int main() {
     // printf("DONE\n");
     // execvp is used to find and execute binary executables
 
+    // linked list for jobs
+    Job* head = NULL;
+    // Job* head = (Job*)malloc(sizeof(Job));
+    // head->cmd = NULL;
+    // head->jobId = -1;
+    // head->status = -1;
+    // head->nextJob = NULL;
+    // head->previousJob = NULL;
+
+
     while (1) {
         char* result = readline("# ");
 
         // types of commands: job-related, piped, normal
+        if (result == NULL){
+            break;
+        }
+        
         ParsedCmd pcmd = parseCmd(result);
 
         if (debugMode) {
@@ -56,9 +87,9 @@ int main() {
         }
 
         if (pcmd.size == 0) {
-            // user pressed 'enter'
-            // TODO: do we quit the shell or continue as normal?
-            continue;
+            // equivalent to ctrl-d
+            closeOperation(NULL, &pcmd, result);
+            break;
         }
 
         
@@ -206,13 +237,13 @@ int main() {
                 else {
                     char* commandName = cl.one->cmd[0];
                     if (strcmp(commandName, "jobs") == 0) {
-                        
+                        // fg must send SIGCONT to the most recent background or stopped process, print the process to stdout , and wait for completion
                     }
                     else if (strcmp(commandName, "bg") == 0) {
-                        
+                        // bg must send SIGCONT to the most recent stopped process, print the process to stdout in the jobs format, and not wait for completion (as if &)
                     }
                     else if (strcmp(commandName, "fg") == 0) {
-                        
+                        // jobs will print the job control table similar to bash. HOWEVER there are important differences between your yash shell's output and bash's output for the jobs command! Please see the FAQ below.
                     }
                     else {
                         // execvp
@@ -268,9 +299,10 @@ int main() {
         }
 
 
-        freeCommandLineProcesses(cl);
-        freeParsedCmd(pcmd);
-        free(result);
+        
+        closeOperation(&cl, &pcmd, result);
     }
+    freeJobsLinkedList(head);
+
     return 0;
 }

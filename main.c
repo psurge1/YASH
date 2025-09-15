@@ -95,11 +95,19 @@ int main() {
                     }
                     
                     int inFdOne = -1;
+                    int outFdOne = -1;
                     int errFdOne = -1;
                     if (cl.one->input) {
                         inFdOne = open(cl.one->input, OPEN_READ, OPEN_MODE);
                         if (inFdOne == -1) {
                             perror("Error creating/opening input file!");
+                            continue;
+                        }
+                    }
+                    if (cl.one->output) {
+                        outFdOne = open(cl.one->output, OPEN_WRITE, OPEN_MODE);
+                        if (outFdOne == -1) {
+                            perror("Error creating/opening output file!");
                             continue;
                         }
                     }
@@ -120,7 +128,11 @@ int main() {
                         // printf("INPUT FILE: |%s|\n", cl.one->input);
                         close(*readEndOfPipe);
 
-                        dup2(*writeEndOfPipe, STDOUT_FD);
+                        if (outFdOne != -1)
+                            dup2(outFdOne, STDOUT_FD);
+                        else
+                            dup2(*writeEndOfPipe, STDOUT_FD);
+                        
                         if (inFdOne != -1)
                             dup2(inFdOne, STDIN_FD);
                         if (errFdOne != -1)
@@ -135,8 +147,16 @@ int main() {
 
 
 
+                    int inFdTwo = -1;
                     int outFdTwo = -1;
                     int errFdTwo = -1;
+                    if (cl.two->input) {
+                        inFdTwo = open(cl.two->input, OPEN_READ, OPEN_MODE);
+                        if (inFdTwo == -1) {
+                            perror("Error creating/opening input file!");
+                            continue;
+                        }
+                    }
                     if (cl.two->output) {
                         outFdTwo = open(cl.two->output, OPEN_WRITE, OPEN_MODE);
                         if (outFdTwo == -1) {
@@ -160,7 +180,11 @@ int main() {
                         // printf("INSIDE TWO\n");
                         close(*writeEndOfPipe);
                         
-                        dup2(*readEndOfPipe, STDIN_FD);
+                        if (inFdTwo != -1)
+                            dup2(*readEndOfPipe, STDIN_FD);
+                        else
+                            dup2(inFdTwo, STDIN_FD);
+
                         if (outFdTwo != -1) {
                             dup2(outFdTwo, STDOUT_FD);
                         }
@@ -200,22 +224,22 @@ int main() {
                             inFd = open(cl.one->input, OPEN_READ, OPEN_MODE);
                             if (inFd == -1) {
                                 perror("Error creating/opening input file!");
+                                continue;
                             }
-                            continue;
                         }
                         if (cl.one->output) {
                             outFd = open(cl.one->output, OPEN_WRITE, OPEN_MODE);
                             if (outFd == -1) {
                                 perror("Error creating/opening output file!");
+                                continue;
                             }
-                            continue;
                         }
                         if (cl.one->err) {
                             errFd = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
                             if (errFd == -1) {
                                 perror("Error creating/opening error file!");
+                                continue;
                             }
-                            continue;
                         }
 
                         pid_t pid = fork();

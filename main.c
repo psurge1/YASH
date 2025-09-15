@@ -21,21 +21,40 @@ enum IO_FDS {
     STDERR_FD = 2
 };
 
-
 typedef struct JobStruct {
-    char** cmd;
+    char* cmd;
     int jobId;
+    pid_t jobPid;
     int status; // 0 for running, 1 for stopped, 2 for done
     struct JobStruct* nextJob;
     struct JobStruct* previousJob;
 } Job;
-Job jobs[20];
+
+
+Job* head;
+Job* tail;
+
+
 
 void freeJobsLinkedList(Job* head) {
     if (!head)
         return;
     freeJobsLinkedList(head->nextJob);
+    free(head->cmd);
     free(head);
+}
+
+void addJob(Job* job) {
+    Job* jbHead = head;
+    if (!jbHead)
+        return;
+    while(jbHead->nextJob) {
+        jbHead = jbHead->nextJob;
+    }
+    jbHead->nextJob = job;
+    job->previousJob = jbHead;
+    job->nextJob = NULL;
+    tail = job;
 }
 
 void closeOperation(CommandLine* cl, ParsedCmd* pcmd, char* cmdString) {
@@ -52,14 +71,64 @@ void closeOperation(CommandLine* cl, ParsedCmd* pcmd, char* cmdString) {
 
 int debugMode = 0;
 
+void checkAndReapJobs() {
+    Job* current = head->nextJob;
+    Job* prev = head;
 
+    while (current != NULL) {
+        if (current->status == 2) {
+            printf("[%d]+ Done\t\t%s\n", current->jobId, current->cmd);
+            prev->nextJob = current->nextJob;
+            if (current->nextJob) {
+                current->nextJob->previousJob = prev;
+            } else {
+                tail = prev;
+            }
+
+            Job* to_free = current;
+            current = current->nextJob;
+
+            free(to_free->cmd);
+            free(to_free);
+        } else {
+            prev = current;
+            current = current->nextJob;
+        }
+    }
+}
 
 void sigStpHandler(int signal) {
-    exit(0);
+    int status;
+    pid_t pid;
+    while((pid = waitpid(-1, &status, WUNTRACED))) {
+
+    }
 }
 
 void sigChildHandler(int signal) {
+    fprintf(stderr, "!!! SIGCHLD HANDLER FIRED !!!\n"); 
+
+    int status;
+    pid_t pid;
     
+
+    // Use WNOHANG | WUNTRACED to reap any child that has stopped or terminated.
+    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
+        Job* jb = head; // Assume 'head' is your global job list head
+        while (jb) {
+            if (jb->jobPid == pid) {
+                if (WIFSTOPPED(status)) {
+                    // Job was stopped by a signal (Ctrl-Z)
+                    jb->status = 1; // 1 for stopped
+                } else {
+                    // Job was terminated (normally or by a signal)
+                    jb->status = 2; // 2 for done
+                }
+                break;
+            }
+            jb = jb->nextJob;
+        }
+    }
 }
 
 // parent process
@@ -69,7 +138,7 @@ int main() {
     // printf("DONE\n");
     // execvp is used to find and execute binary executables
     // signal(SIGTSTP, sigStpHandler);
-    // signal(SIGCHLD, sigChildHandler);
+    signal(SIGCHLD, sigChildHandler);
 
     // signal(SIGINT, SIG_IGN);
     // signal(SIGTSTP, SIG_IGN);
@@ -77,20 +146,23 @@ int main() {
     // signal(SIGCHLD, SIG_IGN);
 
     // linked list for jobs
-    Job* head = NULL;
-    Job* head = (Job*)malloc(sizeof(Job));
+    head = (Job*)malloc(sizeof(Job));
     head->cmd = NULL;
     head->jobId = -1;
+    head->jobPid = -1;
     head->status = -1;
     head->nextJob = NULL;
     head->previousJob = NULL;
-    
-    int jobIdCounter = 1;
+    tail = head->nextJob;
+
+    int jobIdCounter = 0;
 
 
     while (1) {
         signal(SIGINT, SIG_IGN);
         signal(SIGTSTP, SIG_IGN);
+
+        checkAndReapJobs();
 
         char* result = readline("# ");
 
@@ -107,6 +179,8 @@ int main() {
             continue;
         }
         // printf("%p, |%s|\n", (void*)result, result);
+        char* resultDuplicate = (char*)malloc(sizeof(char) * strlen(result) + 1);
+        strcpy(resultDuplicate, result);
         
         ParsedCmd pcmd = parseCmd(result);
 
@@ -118,6 +192,7 @@ int main() {
         if (pcmd.size == 0) {
             // equivalent to ctrl-d
             closeOperation(NULL, &pcmd, result);
+            free(resultDuplicate);
             break;
         }
 
@@ -139,9 +214,67 @@ int main() {
         if (cl.one) {
             if (cl.isBackground) {
                 // background task
-                
+                int inFdOne = -1;
+                int outFdOne = -1;
+                int errFdOne = -1;
+                if (cl.one->input) {
+                    inFdOne = open(cl.one->input, OPEN_READ, OPEN_MODE);
+                    if (inFdOne == -1) {
+                        perror("Error creating/opening input file!");
+                        closeOperation(&cl, &pcmd, result);
+                        free(resultDuplicate);
+                        continue;
+                    }
+                }
+                if (cl.one->output) {
+                    outFdOne = open(cl.one->output, OPEN_WRITE, OPEN_MODE);
+                    if (outFdOne == -1) {
+                        perror("Error creating/opening output file!");
+                        closeOperation(&cl, &pcmd, result);
+                        free(resultDuplicate);
+                        continue;
+                    }
+                }
+                if (cl.one->err) {
+                    int errFdOne = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
+                    if (errFdOne == -1) {
+                        perror("Error creating/opening error file!");
+                        closeOperation(&cl, &pcmd, result);
+                        free(resultDuplicate);
+                        continue;
+                    }
+                }
+
+                Job* newJob = (Job*)malloc(sizeof(Job));
+                newJob->jobId = ++jobIdCounter;
+                newJob->status = 0;
+                newJob->cmd = resultDuplicate;
+                addJob(newJob);
+
+                pid_t pid = fork();
+                if (pid == -1) {
+                    perror("Error creating fork");
+                }
+                else if (pid == 0) {
+                    signal(SIGINT, SIG_DFL);
+                    signal(SIGTSTP, SIG_DFL);
+                    if (outFdOne != -1)
+                        dup2(outFdOne, STDOUT_FD);
+                    if (inFdOne != -1)
+                        dup2(inFdOne, STDIN_FD);
+                    if (errFdOne != -1)
+                        dup2(errFdOne, STDERR_FD);
+                    
+                    execvp(cl.one->cmd[0], cl.one->cmd);
+                    perror("Error executing process one!");
+                    exit(EXIT_FAILURE);
+                }
+                else {
+                    newJob->jobPid = pid;
+                }
             }
             else {
+                free(resultDuplicate);
                 if (cl.two) {
                     // piping
                     // printf("PIPING\n");
@@ -278,13 +411,56 @@ int main() {
                 else {
                     char* commandName = cl.one->cmd[0];
                     if (strcmp(commandName, "jobs") == 0) {
-                        // fg must send SIGCONT to the most recent background or stopped process, print the process to stdout , and wait for completion
+                        // jobs will print the job control table similar to bash.
+                        // HOWEVER there are important differences between your yash shell's output and bash's output for the jobs command!
+                        // Please see the FAQ.
+                        Job* jb = head->nextJob;
+                        while (jb && jb->nextJob) {
+                            char* successString = '\0';
+                            switch(jb->status) {
+                                case 0: successString = "Running";
+                                break;
+                                
+                                case 1: successString = "Stopped";
+                                break;
+
+                                case 2: successString = "Done";
+                                break;
+                            }
+                            printf("[%d]- %s      %s\n", jb->jobId, successString, jb->cmd);
+                            jb = jb->nextJob;
+                        }
+                        if (jb) {
+                            char* successString = '\0';
+                            switch(jb->status) {
+                                case 0: successString = "Running";
+                                break;
+                                
+                                case 1: successString = "Stopped";
+                                break;
+
+                                case 2: successString = "Done";
+                                break;
+                            }
+                            printf("[%d]+ %s      %s\n", jb->jobId, successString, jb->cmd);
+                        }
                     }
                     else if (strcmp(commandName, "bg") == 0) {
-                        // bg must send SIGCONT to the most recent stopped process, print the process to stdout in the jobs format, and not wait for completion (as if &)
+                        // bg must send SIGCONT to the most recent stopped process,
+                        // print the process to stdout in the jobs format,
+                        // and not wait for completion (as if &)
                     }
                     else if (strcmp(commandName, "fg") == 0) {
-                        // jobs will print the job control table similar to bash. HOWEVER there are important differences between your yash shell's output and bash's output for the jobs command! Please see the FAQ below.
+                        // fg must send SIGCONT to the most recent background or stopped process,
+                        // print the process to stdout,
+                        // and wait for completion
+                        Job* jb = head->nextJob;
+                        while (jb && jb->nextJob) {
+                            jb = jb->nextJob;
+                        }
+                        if (jb) {
+                            // bring the process to foreground
+                        }
                     }
                     else {
                         // execvp

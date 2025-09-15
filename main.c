@@ -93,6 +93,23 @@ int main() {
                     if (pipeSuccess == -1) {
                         perror("Error constructing pipe");
                     }
+                    
+                    int inFdOne = -1;
+                    int errFdOne = -1;
+                    if (cl.one->input) {
+                        inFdOne = open(cl.one->input, OPEN_READ, OPEN_MODE);
+                        if (inFdOne == -1) {
+                            perror("Error creating/opening input file!");
+                            continue;
+                        }
+                    }
+                    if (cl.one->err) {
+                        int errFdOne = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
+                        if (errFdOne == -1) {
+                            perror("Error creating/opening error file!");
+                            continue;
+                        }
+                    }
 
                     pid_t pidOne = fork();
                     if (pidOne == -1) {
@@ -102,29 +119,37 @@ int main() {
                         // printf("INSIDE ONE\n");
                         // printf("INPUT FILE: |%s|\n", cl.one->input);
                         close(*readEndOfPipe);
-                        dup2(*writeEndOfPipe, STDOUT_FD);
 
-                        if (cl.one->input) {
-                            int inFd = open(cl.one->input, OPEN_READ, OPEN_MODE);
-                            if (inFd == -1) {
-                                perror("Error creating/opening input file!");
-                                exit(EXIT_FAILURE);
-                            }
-                            dup2(inFd, STDIN_FD);
-                        }
-                        if (cl.one->err) {
-                            int errFd = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
-                            if (errFd == -1) {
-                                perror("Error creating/opening error file!");
-                                exit(EXIT_FAILURE);
-                            }
-                            dup2(errFd, STDERR_FD);
-                        }
+                        dup2(*writeEndOfPipe, STDOUT_FD);
+                        if (inFdOne != -1)
+                            dup2(inFdOne, STDIN_FD);
+                        if (errFdOne != -1)
+                            dup2(errFdOne, STDERR_FD);
                         // printf("DONE SETTING UP FDS\n");
 
                         execvp(cl.one->cmd[0], cl.one->cmd);
                         perror("Error executing process one!");
                         exit(EXIT_FAILURE);
+                    }
+
+
+
+
+                    int outFdTwo = -1;
+                    int errFdTwo = -1;
+                    if (cl.two->output) {
+                        outFdTwo = open(cl.two->output, OPEN_WRITE, OPEN_MODE);
+                        if (outFdTwo == -1) {
+                            perror("Error creating/opening output file!");
+                            continue;
+                        }
+                    }
+                    if (cl.two->err) {
+                        int errFdTwo = open(cl.two->err, OPEN_WRITE, OPEN_MODE);
+                        if (errFdTwo == -1) {
+                            perror("Error creating/opening error file!");
+                            continue;
+                        }
                     }
 
                     pid_t pidTwo = fork();
@@ -134,23 +159,13 @@ int main() {
                     else if (pidTwo == 0) {
                         // printf("INSIDE TWO\n");
                         close(*writeEndOfPipe);
+                        
                         dup2(*readEndOfPipe, STDIN_FD);
-
-                        if (cl.two->output) {
-                            int outFd = open(cl.two->output, OPEN_WRITE, OPEN_MODE);
-                            if (outFd == -1) {
-                                perror("Error creating/opening output file!");
-                                exit(EXIT_FAILURE);
-                            }
-                            dup2(outFd, STDOUT_FD);
+                        if (outFdTwo != -1) {
+                            dup2(outFdTwo, STDOUT_FD);
                         }
-                        if (cl.two->err) {
-                            int errFd = open(cl.two->err, OPEN_WRITE, OPEN_MODE);
-                            if (errFd == -1) {
-                                perror("Error creating/opening error file!");
-                                exit(EXIT_FAILURE);
-                            }
-                            dup2(errFd, STDERR_FD);
+                        if (errFdTwo != -1) {
+                            dup2(errFdTwo, STDERR_FD);
                         }
 
                         execvp(cl.two->cmd[0], cl.two->cmd);
@@ -178,34 +193,44 @@ int main() {
                     }
                     else {
                         // execvp
+                        int inFd = -1;
+                        int outFd = -1;
+                        int errFd = -1;
+                        if (cl.one->input) {
+                            inFd = open(cl.one->input, OPEN_READ, OPEN_MODE);
+                            if (inFd == -1) {
+                                perror("Error creating/opening input file!");
+                            }
+                            continue;
+                        }
+                        if (cl.one->output) {
+                            outFd = open(cl.one->output, OPEN_WRITE, OPEN_MODE);
+                            if (outFd == -1) {
+                                perror("Error creating/opening output file!");
+                            }
+                            continue;
+                        }
+                        if (cl.one->err) {
+                            errFd = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
+                            if (errFd == -1) {
+                                perror("Error creating/opening error file!");
+                            }
+                            continue;
+                        }
+
                         pid_t pid = fork();
                         if (pid == -1) {
                             perror("Error creating fork!");
                         }
                         else if (pid == 0) {
                             // child
-                            if (cl.one->input) {
-                                int inFd = open(cl.one->input, OPEN_READ, OPEN_MODE);
-                                if (inFd == -1) {
-                                    perror("Error creating/opening input file!");
-                                    exit(EXIT_FAILURE);
-                                }
+                            if (inFd != -1) {
                                 dup2(inFd, STDIN_FD);
                             }
-                            if (cl.one->output) {
-                                int outFd = open(cl.one->output, OPEN_WRITE, OPEN_MODE);
-                                if (outFd == -1) {
-                                    perror("Error creating/opening output file!");
-                                    exit(EXIT_FAILURE);
-                                }
+                            if (outFd != -1) {
                                 dup2(outFd, STDOUT_FD);
                             }
-                            if (cl.one->err) {
-                                int errFd = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
-                                if (errFd == -1) {
-                                    perror("Error creating/opening error file!");
-                                    exit(EXIT_FAILURE);
-                                }
+                            if (errFd != -1) {
                                 dup2(errFd, STDERR_FD);
                             }
 

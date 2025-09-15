@@ -46,13 +46,25 @@ void closeOperation(CommandLine* cl, ParsedCmd* pcmd, char* cmdString) {
 }
 
 
-/**
- * 
- * 
- * File creation: use open with S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH
- */
+
 
 int debugMode = 0;
+volatile pid_t foregroundProcessPID = 0; // can be changed by signal handler (outside control flow): shouldn't be optimized out by compiler
+
+
+void sigIntHandler(int signal) {
+    if (foregroundProcessPID != 0 && foregroundProcessPID != -1) {
+        kill(foregroundProcessPID, SIGTERM);
+    }
+}
+
+void sigStpHandler(int signal) {
+
+}
+
+void sigChildHandler(int signal) {
+    
+}
 
 // parent process
 int main() {
@@ -60,6 +72,9 @@ int main() {
     // execLearn();
     // printf("DONE\n");
     // execvp is used to find and execute binary executables
+    signal(SIGINT, sigIntHandler);
+    signal(SIGTSTP, sigStpHandler);
+    signal(SIGCHLD, sigChildHandler);
 
     // linked list for jobs
     Job* head = NULL;
@@ -231,8 +246,10 @@ int main() {
                     close(*readEndOfPipe);
                     close(*writeEndOfPipe);
 
+                    foregroundProcessPID = pidTwo;
                     waitpid(pidOne, NULL, 0);
                     waitpid(pidTwo, NULL, 0);
+                    foregroundProcessPID = 0;
                 }
                 else {
                     char* commandName = cl.one->cmd[0];
@@ -291,8 +308,11 @@ int main() {
                             execvp(cl.one->cmd[0], cl.one->cmd);
                             exit(EXIT_FAILURE);
                         }
-
-                        waitpid(pid, NULL, 0);
+                        else {
+                            foregroundProcessPID = pid;
+                            waitpid(pid, NULL, 0);
+                            foregroundProcessPID = 0;
+                        }
                     }
                 }
             }

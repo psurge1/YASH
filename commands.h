@@ -1,1 +1,0 @@
-int doCommand(char** commands, int startIndex, int endIndex);

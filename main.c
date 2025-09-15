@@ -39,9 +39,12 @@ void freeJobsLinkedList(Job* head) {
 }
 
 void closeOperation(CommandLine* cl, ParsedCmd* pcmd, char* cmdString) {
-    freeCommandLineProcesses(*cl);
-    freeParsedCmd(*pcmd);
-    free(cmdString);
+    if (cl)
+        freeCommandLineProcesses(*cl);
+    if (pcmd)
+        freeParsedCmd(*pcmd);
+    if (cmdString)
+        free(cmdString);
 }
 
 
@@ -50,12 +53,9 @@ void closeOperation(CommandLine* cl, ParsedCmd* pcmd, char* cmdString) {
 int debugMode = 0;
 
 
-void sigIntHandler(int signal) {
-    
-}
 
 void sigStpHandler(int signal) {
-
+    exit(0);
 }
 
 void sigChildHandler(int signal) {
@@ -68,31 +68,45 @@ int main() {
     // execLearn();
     // printf("DONE\n");
     // execvp is used to find and execute binary executables
-    // signal(SIGINT, sigIntHandler);
     // signal(SIGTSTP, sigStpHandler);
     // signal(SIGCHLD, sigChildHandler);
-    signal(SIGINT, SIG_IGN);
-    signal(SIGTSTP, SIG_IGN);
-    signal(SIGTTOU, SIG_IGN);
-    signal(SIGCHLD, SIG_IGN);
+
+    // signal(SIGINT, SIG_IGN);
+    // signal(SIGTSTP, SIG_IGN);
+    // signal(SIGTTOU, SIG_IGN);
+    // signal(SIGCHLD, SIG_IGN);
 
     // linked list for jobs
     Job* head = NULL;
-    // Job* head = (Job*)malloc(sizeof(Job));
-    // head->cmd = NULL;
-    // head->jobId = -1;
-    // head->status = -1;
-    // head->nextJob = NULL;
-    // head->previousJob = NULL;
+    Job* head = (Job*)malloc(sizeof(Job));
+    head->cmd = NULL;
+    head->jobId = -1;
+    head->status = -1;
+    head->nextJob = NULL;
+    head->previousJob = NULL;
+    
+    int jobIdCounter = 1;
 
 
     while (1) {
+        signal(SIGINT, SIG_IGN);
+        signal(SIGTSTP, SIG_IGN);
+
         char* result = readline("# ");
 
         // types of commands: job-related, piped, normal
         if (result == NULL){
+            // end of file only (ctrl-d)
+            closeOperation(NULL, NULL, NULL);
             break;
         }
+
+        if (result[0] == '\0') {
+            // blank enter
+            closeOperation(NULL, NULL, result);
+            continue;
+        }
+        // printf("%p, |%s|\n", (void*)result, result);
         
         ParsedCmd pcmd = parseCmd(result);
 
@@ -139,6 +153,7 @@ int main() {
                         inFdOne = open(cl.one->input, OPEN_READ, OPEN_MODE);
                         if (inFdOne == -1) {
                             perror("Error creating/opening input file!");
+                            closeOperation(&cl, &pcmd, result);
                             continue;
                         }
                     }
@@ -146,6 +161,7 @@ int main() {
                         outFdOne = open(cl.one->output, OPEN_WRITE, OPEN_MODE);
                         if (outFdOne == -1) {
                             perror("Error creating/opening output file!");
+                            closeOperation(&cl, &pcmd, result);
                             continue;
                         }
                     }
@@ -153,6 +169,7 @@ int main() {
                         int errFdOne = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
                         if (errFdOne == -1) {
                             perror("Error creating/opening error file!");
+                            closeOperation(&cl, &pcmd, result);
                             continue;
                         }
                     }
@@ -164,6 +181,7 @@ int main() {
                         inFdTwo = open(cl.two->input, OPEN_READ, OPEN_MODE);
                         if (inFdTwo == -1) {
                             perror("Error creating/opening input file!");
+                            closeOperation(&cl, &pcmd, result);
                             continue;
                         }
                     }
@@ -171,6 +189,7 @@ int main() {
                         outFdTwo = open(cl.two->output, OPEN_WRITE, OPEN_MODE);
                         if (outFdTwo == -1) {
                             perror("Error creating/opening output file!");
+                            closeOperation(&cl, &pcmd, result);
                             continue;
                         }
                     }
@@ -178,6 +197,7 @@ int main() {
                         int errFdTwo = open(cl.two->err, OPEN_WRITE, OPEN_MODE);
                         if (errFdTwo == -1) {
                             perror("Error creating/opening error file!");
+                            closeOperation(&cl, &pcmd, result);
                             continue;
                         }
                     }
@@ -196,8 +216,10 @@ int main() {
                         perror("Error creating fork");
                     }
                     else if (pidOne == 0) {
-                        // printf("INSIDE ONE\n");
-                        // printf("INPUT FILE: |%s|\n", cl.one->input);
+                        setpgid(0, 0);
+                        signal(SIGINT, SIG_DFL);
+                        signal(SIGTSTP, SIG_DFL);
+                        
                         close(*readEndOfPipe);
 
                         if (outFdOne != -1)
@@ -222,6 +244,9 @@ int main() {
                         perror("Error creating fork");
                     }
                     else if (pidTwo == 0) {
+                        setpgid(0, pidOne);
+                        signal(SIGINT, SIG_DFL);
+                        signal(SIGTSTP, SIG_DFL);
                         // printf("INSIDE TWO\n");
                         close(*writeEndOfPipe);
                         
@@ -270,6 +295,7 @@ int main() {
                             inFd = open(cl.one->input, OPEN_READ, OPEN_MODE);
                             if (inFd == -1) {
                                 perror("Error creating/opening input file!");
+                                closeOperation(&cl, &pcmd, result);
                                 continue;
                             }
                         }
@@ -277,6 +303,7 @@ int main() {
                             outFd = open(cl.one->output, OPEN_WRITE, OPEN_MODE);
                             if (outFd == -1) {
                                 perror("Error creating/opening output file!");
+                                closeOperation(&cl, &pcmd, result);
                                 continue;
                             }
                         }
@@ -284,6 +311,7 @@ int main() {
                             errFd = open(cl.one->err, OPEN_WRITE, OPEN_MODE);
                             if (errFd == -1) {
                                 perror("Error creating/opening error file!");
+                                closeOperation(&cl, &pcmd, result);
                                 continue;
                             }
                         }
@@ -293,6 +321,8 @@ int main() {
                             perror("Error creating fork!");
                         }
                         else if (pid == 0) {
+                            signal(SIGINT, SIG_DFL);
+                            signal(SIGTSTP, SIG_DFL);
                             // child
                             if (inFd != -1) {
                                 dup2(inFd, STDIN_FD);
@@ -319,6 +349,7 @@ int main() {
         
         closeOperation(&cl, &pcmd, result);
     }
+
     freeJobsLinkedList(head);
 
     return 0;

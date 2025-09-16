@@ -8,12 +8,15 @@
 #include <readline/readline.h>
 #include <signal.h>
 
-#include <parsing.h>
+#include "parsing.h"
 
 const int OPEN_WRITE = O_WRONLY|O_CREAT|O_TRUNC;
 const int OPEN_READ = O_RDONLY;
 const int OPEN_MODE = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
 
+
+int fg_pid=0;
+int last_pid=0;
 
 enum IO_FDS {
     STDIN_FD = 0,
@@ -97,11 +100,13 @@ void checkAndReapJobs() {
     }
 }
 
-void sigStpHandler(int signal) {
+void sigtstpHandler(int sig) {
     int status;
-    pid_t pid;
-    while((pid = waitpid(-1, &status, WUNTRACED))) {
-
+    printf("\nStopping process %d\n", fg_pid);
+    if (fg_pid > 0) {
+        kill(fg_pid, SIGTSTP); 
+	    waitpid(fg_pid, &status, WNOHANG);
+        fg_pid = 0; // no more foreground
     }
 }
 
@@ -138,7 +143,9 @@ int main() {
     // printf("DONE\n");
     // execvp is used to find and execute binary executables
     // signal(SIGTSTP, sigStpHandler);
-    signal(SIGCHLD, sigChildHandler);
+    //signal(SIGCHLD, sigChildHandler);
+
+    signal(SIGTSTP, sigtstpHandler);
 
     // signal(SIGINT, SIG_IGN);
     // signal(SIGTSTP, SIG_IGN);
@@ -160,9 +167,9 @@ int main() {
 
     while (1) {
         signal(SIGINT, SIG_IGN);
-        signal(SIGTSTP, SIG_IGN);
+        //signal(SIGTSTP, SIG_IGN);
 
-        checkAndReapJobs();
+        // checkAndReapJobs();
 
         char* result = readline("# ");
 
@@ -256,8 +263,8 @@ int main() {
                     perror("Error creating fork");
                 }
                 else if (pid == 0) {
-                    signal(SIGINT, SIG_DFL);
-                    signal(SIGTSTP, SIG_DFL);
+                    // signal(SIGINT, SIG_DFL);
+                    // signal(SIGTSTP, SIG_DFL);
                     if (outFdOne != -1)
                         dup2(outFdOne, STDOUT_FD);
                     if (inFdOne != -1)
@@ -350,8 +357,8 @@ int main() {
                     }
                     else if (pidOne == 0) {
                         setpgid(0, 0);
-                        signal(SIGINT, SIG_DFL);
-                        signal(SIGTSTP, SIG_DFL);
+                        // signal(SIGINT, SIG_DFL);
+                        // signal(SIGTSTP, SIG_DFL);
                         
                         close(*readEndOfPipe);
 
@@ -378,8 +385,8 @@ int main() {
                     }
                     else if (pidTwo == 0) {
                         setpgid(0, pidOne);
-                        signal(SIGINT, SIG_DFL);
-                        signal(SIGTSTP, SIG_DFL);
+                        // signal(SIGINT, SIG_DFL);
+                        // signal(SIGTSTP, SIG_DFL);
                         // printf("INSIDE TWO\n");
                         close(*writeEndOfPipe);
                         
@@ -449,6 +456,7 @@ int main() {
                         // bg must send SIGCONT to the most recent stopped process,
                         // print the process to stdout in the jobs format,
                         // and not wait for completion (as if &)
+			            kill(last_pid, SIGCONT);
                     }
                     else if (strcmp(commandName, "fg") == 0) {
                         // fg must send SIGCONT to the most recent background or stopped process,
@@ -459,7 +467,11 @@ int main() {
                             jb = jb->nextJob;
                         }
                         if (jb) {
-                            // bring the process to foreground
+                            kill(jb->jobPid, SIGCONT);
+                                        // bring the process to foreground
+                            fg_pid = jb->jobPid;
+                            last_pid = fg_pid;
+                            waitpid(jb->jobPid, NULL,  WUNTRACED);
                         }
                     }
                     else {
@@ -497,8 +509,8 @@ int main() {
                             perror("Error creating fork!");
                         }
                         else if (pid == 0) {
-                            signal(SIGINT, SIG_DFL);
-                            signal(SIGTSTP, SIG_DFL);
+                            // signal(SIGINT, SIG_DFL);
+                            // signal(SIGTSTP, SIG_DFL);
                             // child
                             if (inFd != -1) {
                                 dup2(inFd, STDIN_FD);
@@ -530,3 +542,4 @@ int main() {
 
     return 0;
 }
+

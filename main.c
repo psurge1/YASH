@@ -15,8 +15,9 @@ const int OPEN_READ = O_RDONLY;
 const int OPEN_MODE = S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH;
 
 
-int fg_pid=0;
-int last_pid=0;
+int fgPid = 0;
+int lastPid = 0;
+int jobId = 0;
 
 enum IO_FDS {
     STDIN_FD = 0,
@@ -36,7 +37,49 @@ typedef struct JobStruct {
 
 Job* head;
 Job* tail;
+Job* last;
 
+
+char *processStatus(Job *jb) {
+    int result;
+    char *str;
+    int status;
+    char *successString = '\0';
+    switch(jb->status) {
+        case 0: successString = "Running";
+        break;
+
+        case 1: successString = "Stopped";
+        break;
+
+        case 2: successString = "Done";
+        break;
+    }
+    str = malloc(strlen(successString)+1);
+    strcpy(str,successString);
+    return str;
+
+}
+
+void printJobStatus() {
+    // jobs will print the job control table similar to bash.
+    // HOWEVER there are important differences between your yash shell's output and bash's output for the jobs command!
+    // Please see the FAQ.
+
+    Job* jb = head->nextJob;
+    char* successString ;
+    while (jb && jb->nextJob) {
+        successString = processStatus(jb);
+        printf("[%d]- %s      %s\n", jb->jobId, successString, jb->cmd);
+        jb = jb->nextJob;
+        free(successString);
+    }
+    if (jb) {
+        successString = processStatus(jb);
+        printf("[%d]+ %s      %s\n", jb->jobId, successString, jb->cmd);
+        free(successString);
+    }
+}
 
 
 void freeJobsLinkedList(Job* head) {
@@ -70,8 +113,6 @@ void closeOperation(CommandLine* cl, ParsedCmd* pcmd, char* cmdString) {
 }
 
 
-
-
 int debugMode = 0;
 
 void checkAndReapJobs() {
@@ -88,46 +129,56 @@ void checkAndReapJobs() {
                 tail = prev;
             }
 
-            Job* to_free = current;
+            Job* toFree = current;
             current = current->nextJob;
 
-            free(to_free->cmd);
-            free(to_free);
-        } else {
+            free(toFree->cmd);
+            free(toFree);
+        }
+        else {
             prev = current;
             current = current->nextJob;
         }
     }
 }
 
-void sigtstpHandler(int sig) {
+void sigIntHandler(int sig) {
     int status;
-    printf("\nStopping process %d\n", fg_pid);
-    if (fg_pid > 0) {
-        kill(fg_pid, SIGTSTP); 
-	    waitpid(fg_pid, &status, WNOHANG);
-        fg_pid = 0; // no more foreground
+    // printf("\nKilling process %d \n", fgPid);
+    
+    if (fgPid >0) {
+        kill(fgPid, SIGTERM);
+        last->status = 2;
+    }
+}
+
+void sigtStpHandler(int sig) {
+    int status;
+    printf("\nStopping process %d\n", fgPid);
+    if (fgPid > 0) {
+        kill(fgPid, SIGTSTP); 
+	    waitpid(fgPid, &status, WNOHANG);
+        fgPid = 0; // no more foreground
     }
 }
 
 void sigChildHandler(int signal) {
-    fprintf(stderr, "!!! SIGCHLD HANDLER FIRED !!!\n"); 
 
+    //fprintf(stderr, "SIGCHLD HANDLER FIRED\n"); 
     int status;
     pid_t pid;
-    
 
-    // Use WNOHANG | WUNTRACED to reap any child that has stopped or terminated.
     while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
-        Job* jb = head; // Assume 'head' is your global job list head
+        Job* jb = head;
         while (jb) {
             if (jb->jobPid == pid) {
                 if (WIFSTOPPED(status)) {
-                    // Job was stopped by a signal (Ctrl-Z)
-                    jb->status = 1; // 1 for stopped
-                } else {
-                    // Job was terminated (normally or by a signal)
-                    jb->status = 2; // 2 for done
+                    // job was stopped by a signal (Ctrl-Z)
+                    jb->status = 1;
+                }
+                else {
+                    // job was terminated (normally or by a signal)
+                    jb->status = 2;
                 }
                 break;
             }
@@ -136,21 +187,12 @@ void sigChildHandler(int signal) {
     }
 }
 
-// parent process
+
 int main() {
-    // forkLearn();
-    // execLearn();
-    // printf("DONE\n");
-    // execvp is used to find and execute binary executables
-    // signal(SIGTSTP, sigStpHandler);
-    //signal(SIGCHLD, sigChildHandler);
+    signal(SIGCHLD, sigChildHandler);
+    signal(SIGTSTP, sigtStpHandler);
+    signal(SIGINT, sigIntHandler);
 
-    signal(SIGTSTP, sigtstpHandler);
-
-    // signal(SIGINT, SIG_IGN);
-    // signal(SIGTSTP, SIG_IGN);
-    // signal(SIGTTOU, SIG_IGN);
-    // signal(SIGCHLD, SIG_IGN);
 
     // linked list for jobs
     head = (Job*)malloc(sizeof(Job));
@@ -166,10 +208,9 @@ int main() {
 
 
     while (1) {
-        signal(SIGINT, SIG_IGN);
-        //signal(SIGTSTP, SIG_IGN);
+        //signal(SIGINT, SIG_IGN);
 
-        // checkAndReapJobs();
+        checkAndReapJobs();
 
         char* result = readline("# ");
 
@@ -263,8 +304,8 @@ int main() {
                     perror("Error creating fork");
                 }
                 else if (pid == 0) {
-                    // signal(SIGINT, SIG_DFL);
-                    // signal(SIGTSTP, SIG_DFL);
+                    signal(SIGINT, SIG_DFL);
+                    signal(SIGTSTP, SIG_DFL);
                     if (outFdOne != -1)
                         dup2(outFdOne, STDOUT_FD);
                     if (inFdOne != -1)
@@ -357,8 +398,8 @@ int main() {
                     }
                     else if (pidOne == 0) {
                         setpgid(0, 0);
-                        // signal(SIGINT, SIG_DFL);
-                        // signal(SIGTSTP, SIG_DFL);
+                        signal(SIGINT, SIG_DFL);
+                        signal(SIGTSTP, SIG_DFL);
                         
                         close(*readEndOfPipe);
 
@@ -385,8 +426,8 @@ int main() {
                     }
                     else if (pidTwo == 0) {
                         setpgid(0, pidOne);
-                        // signal(SIGINT, SIG_DFL);
-                        // signal(SIGTSTP, SIG_DFL);
+                        signal(SIGINT, SIG_DFL);
+                        signal(SIGTSTP, SIG_DFL);
                         // printf("INSIDE TWO\n");
                         close(*writeEndOfPipe);
                         
@@ -418,45 +459,15 @@ int main() {
                 else {
                     char* commandName = cl.one->cmd[0];
                     if (strcmp(commandName, "jobs") == 0) {
-                        // jobs will print the job control table similar to bash.
-                        // HOWEVER there are important differences between your yash shell's output and bash's output for the jobs command!
-                        // Please see the FAQ.
-                        Job* jb = head->nextJob;
-                        while (jb && jb->nextJob) {
-                            char* successString = '\0';
-                            switch(jb->status) {
-                                case 0: successString = "Running";
-                                break;
-                                
-                                case 1: successString = "Stopped";
-                                break;
-
-                                case 2: successString = "Done";
-                                break;
-                            }
-                            printf("[%d]- %s      %s\n", jb->jobId, successString, jb->cmd);
-                            jb = jb->nextJob;
-                        }
-                        if (jb) {
-                            char* successString = '\0';
-                            switch(jb->status) {
-                                case 0: successString = "Running";
-                                break;
-                                
-                                case 1: successString = "Stopped";
-                                break;
-
-                                case 2: successString = "Done";
-                                break;
-                            }
-                            printf("[%d]+ %s      %s\n", jb->jobId, successString, jb->cmd);
-                        }
+                        printJobStatus();
                     }
+
                     else if (strcmp(commandName, "bg") == 0) {
                         // bg must send SIGCONT to the most recent stopped process,
                         // print the process to stdout in the jobs format,
                         // and not wait for completion (as if &)
-			            kill(last_pid, SIGCONT);
+                        kill(lastPid, SIGCONT);
+                        last->status=0;
                     }
                     else if (strcmp(commandName, "fg") == 0) {
                         // fg must send SIGCONT to the most recent background or stopped process,
@@ -468,10 +479,12 @@ int main() {
                         }
                         if (jb) {
                             kill(jb->jobPid, SIGCONT);
-                                        // bring the process to foreground
-                            fg_pid = jb->jobPid;
-                            last_pid = fg_pid;
+                            // bring the process to foreground
+                            fgPid = jb->jobPid;
+                            lastPid = fgPid;
+                            last = jb;
                             waitpid(jb->jobPid, NULL,  WUNTRACED);
+                            jb->status=1;
                         }
                     }
                     else {
@@ -509,8 +522,8 @@ int main() {
                             perror("Error creating fork!");
                         }
                         else if (pid == 0) {
-                            // signal(SIGINT, SIG_DFL);
-                            // signal(SIGTSTP, SIG_DFL);
+                            signal(SIGINT, SIG_DFL);
+                            signal(SIGTSTP, SIG_DFL);
                             // child
                             if (inFd != -1) {
                                 dup2(inFd, STDIN_FD);
@@ -542,4 +555,3 @@ int main() {
 
     return 0;
 }
-
